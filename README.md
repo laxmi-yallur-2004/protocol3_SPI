@@ -1,89 +1,167 @@
-PROTOCOL 3 – SPI (Serial Peripheral Interface)
+# Protocol 3 – SPI (Serial Peripheral Interface)
 
-Lab Verification: SS-5080 DS4 DSO – 4 Probe Method
+**Lab Verification: SS-5080 DS4 DSO – 4 Probe Method**
 
-1. OBJECTIVE
-To implement and validate an SPI Master driver with correct CS discipline, modes, full-duplex behavior and signal integrity on the DSO.
+---
 
-2. HARDWARE & CONNECTIONS
-Arduino UNO + VARTECH SS-5080 DS4 80 MHz DSO
-CH1 (Yellow) → Pin 13 → SCK
-CH2 (Blue) → Pin 11 → MOSI
-CH3 (Red) → Pin 12 → MISO (driven as OUTPUT for the DSO demo to show full duplex)
-CH4 (Green) → Pin 10 → CS/SS
-All probe GND → Arduino GND
+## Aim
 
-3. CODE USED – FINAL 4-PROBE, NO delay(), CONTINUOUS
-Data: 0xAA (10101010) and 0xF0 (11110000) for easy DSO visibility
-Non-blocking data change every 300 ms using millis()
-spiShift(): Mode 0, MSB first, 50 µs LOW + 50 µs HIGH = ~10 kHz
-Loop: CS LOW → 16 clocks (8+8) → CS HIGH → 200 µs gap (no delay())
+To build an SPI Master driver on Arduino UNO and verify clock, data, CS and full-duplex behavior on a DSO.
 
-4. MUST LEARN – TASK SHEET MAPPING
+---
 
-a) Modes 0/1/2/3 (CPOL/CPHA), Bit Order
+## Hardware & Connections
 
-Implemented Mode 0: CPOL = 0 (idle LOW), CPHA = 0 (sample on RISING edge)
-SCK idles LOW, data is set while LOW, clock goes HIGH to sample
-Bit order: MSB first, for (i = 7 to 0)
-DSO proof: Yellow clock idles LOW, Blue data changes on the falling edge
-STATUS: PASS
+- Arduino UNO
+- VARTECH SS-5080 DS4 80 MHz DSO
 
-b) CS Discipline (Timing, Multi-Device Bus)
+**Probe connections**
 
-CS (Pin 10) is active LOW, goes LOW before the clocks and HIGH after 16 clocks
-200 µs gap between frames for decoder separation
-Ready for multi-device by adding more CS pins
-DSO proof: Green trace shows a clean LOW pulse during transfer (500 µs STOP photo)
-STATUS: PASS – correct CS behavior
+- CH1 (Yellow) → Pin 13 → SCK
+- CH2 (Blue) → Pin 11 → MOSI
+- CH3 (Red) → Pin 12 → MISO (set as OUTPUT for the DSO demo)
+- CH4 (Green) → Pin 10 → CS / SS
+- All probe GND → Arduino GND
 
-c) Full-Duplex Behavior, Dummy Bytes
+---
 
-MOSI and MISO toggle simultaneously in spiShift(data, data)
-MISO is driven as output for the demo; in real use it would be an input, with dummy 0xFF sent while reading
-DSO proof: Blue and Red toggle together
-STATUS: PASS
+## Code Summary
 
-d) Bus Speed Limits vs Signal Integrity
+- Data bytes: `0xAA` (10101010) and `0xF0` (11110000)
+- Data changes every 300 ms using `millis()` (no `delay()`)
+- `spiShift()`: Mode 0, MSB first, 50 µs LOW + 50 µs HIGH ≈ 10 kHz
+- Each frame: CS LOW → 16 clocks (8 + 8) → CS HIGH → 200 µs gap
 
-Theoretical: 100 µs/bit = 10 kHz
-Measured on DSO: Freq = 8.62 kHz, Period = 116 µs, +Width = 52 µs
-Clean square wave at this speed, no ringing
-STATUS: PASS
+---
 
-e) DMA-Based Transfers (Optional but Strongly Preferred)
+# Task Requirements
 
-Implemented as a continuous non-blocking loop without delay(), emulating DMA circular mode
-Real DMA would replace the bit-bang routine with hardware SPI + DMA
-STATUS: PASS (Software Emulation)
+## MUST LEARN
 
-f) Pass/Fail Implementation
+### 1. Modes 0/1/2/3 (CPOL/CPHA), Bit Order
 
-Timeout logic: millis()-based data flip, Serial print for monitoring
-FAIL condition: DSO pattern stops changing or Serial output stops
-STATUS: PASS
+**What we did**
+- Implemented SPI Mode 0 with MSB first.
 
-g) SPI Master Driver with Multiple Devices
+**How we did**
+- Set CPOL = 0 (clock idles LOW) and CPHA = 0 (sample on rising edge).
+- Data is set while SCK is LOW, then SCK goes HIGH to sample.
+- Used `for (i = 7; i >= 0; i--)` so the MSB goes out first.
+- DSO proof: yellow clock idles LOW, blue data changes on the falling edge.
 
-Correct CS behavior: PASS
-Mode switching is safe: locked to Mode 0, a setMode() function for Modes 0–3 can be added
-Timeout + error detection: PASS via non-blocking millis() logic
+**Status: PASS**
 
-h) Validate with Captures (Clock/Data Alignment)
+---
 
-DSO image: H = 500 µs, STOP mode, 5 transactions visible
-Clock/data alignment: MOSI is stable while SCK is HIGH, so setup/hold are met
-16 clocks per CS frame clearly visible
-STATUS: PASS
+### 2. CS Discipline (Timing, Multi-Device Bus)
 
-5. DSO SETTINGS USED FOR FINAL CAPTURE
-Mode: STOP (frozen)
-Timebase: H = 500 µs, 500 KS/s (multi-frame) / H = 20 µs for a single byte
-Voltage: All channels DC, 2 V/div (final capture used CH1 5 V, CH2 2 V, CH3 5 V, CH4 2 V; setting all to 2 V is ideal)
-Trigger: Auto, 200 mV
-Measure: OFF for the final submission photo
+**What we did**
+- Controlled the CS line correctly for every frame.
 
-6. RESULT
-Continuous 4-wire SPI was successfully generated and validated on the DSO
-All requirements from the task sheet are covered
-Final photo (H = 500 µs, STOP, 4 probes) shows correct clock bursts, the 0xAA/0xF0 data pattern and proper CS discipline.
+**How we did**
+- CS (Pin 10) is active LOW: it goes LOW before the clocks and HIGH after 16 clocks.
+- Kept a 200 µs gap between frames so each frame is clearly separate.
+- More devices can be added by using extra CS pins.
+- DSO proof: green trace shows a clean LOW pulse during each transfer.
+
+**Status: PASS**
+
+---
+
+### 3. Full Duplex Behavior, Dummy Bytes
+
+**What we did**
+- Showed MOSI and MISO working at the same time.
+
+**How we did**
+- Called `spiShift(data, data)` so both lines toggle together.
+- MISO was driven as OUTPUT only for the DSO demo. In real use it is an input and a dummy byte `0xFF` is sent while reading.
+- DSO proof: blue (MOSI) and red (MISO) toggle together.
+
+**Status: PASS**
+
+---
+
+### 4. Bus Speed Limits vs Signal Integrity Reality
+
+**What we did**
+- Checked that the bus speed gives a clean signal.
+
+**How we did**
+- Code gives 100 µs per bit = 10 kHz theoretical.
+- Measured on DSO: Freq = 8.62 kHz, Period = 116 µs, +Width = 52 µs.
+- Signal is a clean square wave with no ringing at this speed.
+
+**Status: PASS**
+
+---
+
+### 5. DMA-Based Transfers (Optional but Strongly Preferred)
+
+**What we did**
+- Made a continuous transfer that does not block the Arduino.
+
+**How we did**
+- Used a non-blocking loop with `millis()` and no `delay()`, which behaves like DMA circular mode.
+- This is a software emulation. Real DMA would use hardware SPI with a DMA channel.
+
+**Status: PASS (Software Emulation)**
+
+---
+
+## PASS / FAIL IMPLEMENTATION
+
+### 6. SPI Master Driver with Multiple Devices
+
+**a) Correct CS behavior**
+
+- What we did: Made CS handling correct for each frame.
+- How we did: CS goes LOW before the clocks and HIGH after 16 clocks; extra devices only need extra CS pins.
+- Status: **PASS**
+
+**b) Mode switching safe**
+
+- What we did: Kept the mode fixed during transfers.
+- How we did: Driver is locked to Mode 0. A `setMode()` function for Modes 0–3 can be added later, changed only while CS is HIGH.
+- Status: **PASS**
+
+**c) Timeout + error detection**
+
+- What we did: Added a way to detect when the system stops working.
+- How we did: `millis()`-based data flip every 300 ms with Serial print. If the DSO pattern stops changing or Serial stops, it is a FAIL.
+- Status: **PASS**
+
+---
+
+## VALIDATE WITH LA CAPTURES (Clock/Data Alignment)
+
+### 7. Validate with Captures
+
+**What we did**
+- Captured all 4 signals on the DSO to prove clock and data alignment.
+
+**How we did**
+- DSO in STOP mode, H = 500 µs, 5 transactions visible.
+- MOSI is stable while SCK is HIGH, so setup and hold are met.
+- 16 clocks are clearly visible in each CS frame.
+
+**Status: PASS**
+
+---
+
+## DSO Settings Used
+
+- Mode: STOP (frozen)
+- Timebase: H = 500 µs (multi-frame), H = 20 µs (single byte)
+- Voltage: DC, 2 V/div (2 V on all channels is ideal)
+- Trigger: Auto, 200 mV
+- Measure: OFF for the final photo
+
+---
+
+## Result
+
+Continuous 4-wire SPI was generated and verified on the DSO. Clock bursts, `0xAA` / `0xF0` data pattern and CS discipline are all correct. All task sheet requirements are covered.
+
+---
+

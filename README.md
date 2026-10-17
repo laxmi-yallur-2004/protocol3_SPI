@@ -1,7 +1,5 @@
 # Protocol 3 – SPI (Serial Peripheral Interface)
 
-**Lab Verification: SS-5080 DS4 DSO – 4 Probe Method**
-
 ---
 
 ### Aim
@@ -32,24 +30,24 @@ To build an SPI Master driver on Arduino UNO and verify clock, data, CS and full
 #### 1. Modes 0/1/2/3 (CPOL/CPHA), Bit Order
 - **What we did:** Implemented Mode 0, MSB first.
 - **How we did:** CPOL=0 idle LOW, CPHA=0 sample rising. Data set when LOW, sampled HIGH. for(i=7;i>=0;i--) MSB first.
-- **DSO Proof:** Yellow idles LOW, Blue changes on falling. Measured 8.62kHz vs 10kHz theory, difference due to digitalWrite() overhead (~8us).
+- **DSO Proof:** Yellow idles LOW, Blue changes on falling edge. Measured 8.62kHz vs 10kHz theory; the extra ~16us per bit comes from digitalWrite() and loop overhead.
 - **Status:** PASS
 
 #### 2. CS Discipline (Timing, Multi-Device Bus)
 - **What we did:** Correct CS per frame.
 - **How we did:** CS active LOW, LOW before clocks, HIGH after 16 clocks. 200us gap separates frames. Extra devices via extra CS pins.
-- **DSO Proof:** Green trace clean LOW pulse in STOP 500us capture.
+- **DSO Proof:** Green CS trace (CH4) captured with the clock bursts in STOP mode. Close-up capture at H=200us shows CS LOW during the 16 clocks and HIGH in the gap.
 - **Status:** PASS
 
 #### 3. Full Duplex Behavior, Dummy Bytes
 - **What we did:** Simultaneous MOSI/MISO.
 - **How we did:** spiShift(data,data) toggles both. Demo MISO=OUTPUT, real use MISO=INPUT with dummy 0xFF sent while reading.
-- **DSO Proof:** Blue and Red toggle together.
+- **DSO Proof:** Blue and Red toggle together during the clock bursts.
 - **Status:** PASS
 
 #### 4. Bus Speed Limits vs Signal Integrity Reality
 - **What we did:** Speed vs integrity check.
-- **How we did:** Theory 100us/bit = 10kHz, Measured Freq=8.62kHz Period=116us +Wid=52us. Clean square, no ringing at this speed. Higher speed >1MHz needs shorter leads.
+- **How we did:** Theory 100us/bit = 10kHz. Measured Freq=8.62kHz, Period=116us, +Wid=52us, -Wid=64us (duty 44.83% / 55.17%). Square wave is clean with minor overshoot (Vmax 6.2V, about 3.7%). Higher speed (>1MHz) needs shorter leads and proper grounding.
 - **Status:** PASS
 
 #### 5. DMA-Based Transfers (Optional but Strongly Preferred)
@@ -64,20 +62,19 @@ To build an SPI Master driver on Arduino UNO and verify clock, data, CS and full
 
 #### 7. Validate with LA Captures (Clock/Data Alignment)
 - **What we did:** 4-channel DSO capture.
-- **How we did:** STOP mode H=500us 5 transactions visible, H=20us single byte. MOSI stable when SCK HIGH = Setup/Hold met. 16 clocks/CS frame visible.
+- **How we did:** STOP mode H=500us with 3-4 frames visible; H=20us single byte shows the 0xAA / 0xF0 bit pattern. MOSI stable when SCK HIGH = Setup/Hold met. 16 clocks per CS frame.
 - **Status:** PASS
 
 ---
 
 ### DSO Settings Used
 - Mode: STOP frozen
-- Timebase: H=500us multi-frame / H=20us single byte
-- Voltage: DC 2V/div all channels
+- Timebase: H=500us (500KS/s) multi-frame / H=20us single byte
+- Voltage: DC, CH1 5V, CH2 2V, CH3 5V, CH4 2V per div
 - Trigger: Auto 200mV
-- Measure: OFF
+- Measure: ON in final photo (Freq, Period, +Wid, Duty visible)
 
 ---
 
 ### Result
 Continuous 4-wire SPI verified. Clock bursts, 0xAA/0xF0 pattern, CS discipline correct. All task sheet requirements PASS.
-

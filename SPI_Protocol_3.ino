@@ -1,60 +1,50 @@
-#include <SPI.h>
-#define CS_DEV1 4
-#define CS_DEV2 10
-#define TIMEOUT_MS 100
+#define SCK_PIN  13  // CH1 Yellow - SCK
+#define MOSI_PIN 11  // CH2 Blue - MOSI
+#define MISO_PIN 12  // CH3 Pink - MISO (we drive it for demo)
+#define CS_PIN   10  // CH4 Green - CS/SS
 
-enum { SPI_FAIL = 0, SPI_PASS = 1 };
-
-int spi_transfer_with_timeout(uint8_t csPin, uint8_t spiMode, uint32_t spiClock, uint8_t *tx, uint8_t *rx, uint8_t len) {
-  digitalWrite(csPin, HIGH);
-  SPI.beginTransaction(SPISettings(spiClock, MSBFIRST, spiMode));
-  digitalWrite(csPin, LOW);
-  unsigned long start = millis();
-  for (uint8_t i = 0; i < len; i++) {
-    if (millis() - start > TIMEOUT_MS) {
-      digitalWrite(csPin, HIGH);
-      SPI.endTransaction();
-      return SPI_FAIL;
-    }
-    uint8_t txByte = tx? tx[i] : 0xFF;
-    uint8_t rxByte = SPI.transfer(txByte);
-    if (rx) rx[i] = rxByte;
-  }
-  digitalWrite(csPin, HIGH);
-  SPI.endTransaction();
-  return SPI_PASS;
-}
+byte data1 = 0xAA; // 10101010 - Easy to see on DSO
+byte data2 = 0xF0; // 11110000 - Easy to see
+unsigned long lastMillis = 0;
 
 void setup() {
+  pinMode(SCK_PIN, OUTPUT);
+  pinMode(MOSI_PIN, OUTPUT);
+  pinMode(MISO_PIN, OUTPUT); // For DSO demo we make MISO OUTPUT
+  pinMode(CS_PIN, OUTPUT);
+  digitalWrite(CS_PIN, HIGH);
+  digitalWrite(SCK_PIN, LOW);
   Serial.begin(9600);
-  SPI.begin();
-  pinMode(CS_DEV1, OUTPUT);
-  pinMode(CS_DEV2, OUTPUT);
-  digitalWrite(CS_DEV1, HIGH);
-  digitalWrite(CS_DEV2, HIGH);
+  Serial.println("4-PROBE NO DELAY READY");
+}
+
+// Fast shift - No delay() in loop, only microsec for clock
+void spiShift(byte mosiData, byte misoData) {
+  for (int i=7; i>=0; i--) {
+    digitalWrite(SCK_PIN, LOW);
+    digitalWrite(MOSI_PIN, (mosiData>>i)&1);
+    digitalWrite(MISO_PIN, (misoData>>i)&1);
+    delayMicroseconds(50);
+    digitalWrite(SCK_PIN, HIGH);
+    delayMicroseconds(50);
+  }
+  digitalWrite(SCK_PIN, LOW);
 }
 
 void loop() {
-  static unsigned long lastRun = 0;
-  if (millis() - lastRun < 2000) return;
-  lastRun = millis();
+  // Change data every 300ms - Non-blocking
+  if (millis() - lastMillis >= 300) {
+    lastMillis = millis();
+    data1 = ~data1; // Flip 0xAA to 0x55 - DSO shows change
+    Serial.print("Sending: 0x");
+    Serial.println(data1, HEX);
+  }
 
-  uint8_t tx1[] = {0x9F};
-  uint8_t rx1[3] = {0};
-  uint8_t tx2[] = {0x55, 0xAA};
-  uint8_t rx2[2] = {0};
-
-  int r1 = spi_transfer_with_timeout(CS_DEV1, SPI_MODE0, 4000000, tx1, rx1, 1);
-  int r2 = spi_transfer_with_timeout(CS_DEV2, SPI_MODE3, 1000000, tx2, rx2, 2);
-
-  if (r1 == SPI_PASS) Serial.println("DEV1 MODE0 4MHz: PASS");
-  else Serial.println("DEV1 MODE0 4MHz: FAIL");
-
-  if (r2 == SPI_PASS) Serial.println("DEV2 MODE3 1MHz: PASS");
-  else Serial.println("DEV2 MODE3 1MHz: FAIL");
-
-  if (r1 == SPI_PASS && r2 == SPI_PASS) Serial.println("RESULT: PASS - SPI Communication OK");
-  else Serial.println("RESULT: FAIL");
-
-  Serial.println("---");
+  // CONTINUOUS SPI - No delay() - DSO sees non-stop
+  digitalWrite(CS_PIN, LOW);   // CS LOW = Transfer start
+  spiShift(data1, data1);      // 8 clocks - CH1 + CH2 + CH3 toggle
+  spiShift(data2, data2);      // 8 clocks - 16 clocks per frame
+  digitalWrite(CS_PIN, HIGH);  // CS HIGH = End
+  
+  delayMicroseconds(200); // Tiny gap to see CS - Not delay()
 }
